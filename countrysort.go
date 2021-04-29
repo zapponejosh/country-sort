@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
+	"strings"
 )
 
 func check(e error) {
@@ -15,17 +17,25 @@ func check(e error) {
 	}
 }
 
-func searchFile(file []byte, path string, countries []map[string]string) {
+func searchFile(file []byte, path string, countries []map[string]string, regionAbbv string) []map[string]string {
+
+	regionalList := make([]map[string]string, 0)
 	for _, c := range countries {
-		fmt.Printf("%v\n", c)
-		json.NewEncoder(os.Stdout).Encode(c)
-		// _, ok := c["English"]
-		// fmt.Println(ok)
+
+		param := []byte(c["English"])
+		if bytes.Contains(file, param) {
+			// fmt.Printf("Found %s in %s. Translation: %s\n", string(param), string(path), c["Translated"])
+
+			entry := map[string]string{
+				"continent": regionAbbv,
+				// "countryCode": "code",
+				"countryName": c["Translated"],
+			}
+
+			regionalList = append(regionalList, entry)
+		}
 	}
-	param := []byte("Aruba")
-	if bytes.Contains(file, param) {
-		// fmt.Printf("Found %s in %s \n", string(param), string(path))
-	}
+	return regionalList
 }
 
 func getTrans(filename string) []map[string]string {
@@ -57,17 +67,30 @@ func main() {
 	dirPath := args[0]
 	transCSV := args[1]
 	countries := getTrans(transCSV)
+	outputDir := args[2]
 
 	files, err := os.ReadDir(dirPath)
 	check(err)
+
+	e := os.Mkdir(outputDir, 0744)
+	check(e)
 
 	for _, f := range files {
 		fmt.Printf("File path: %s/%s\n", dirPath, f.Name())
 		filepath := dirPath + "/" + f.Name()
 		file, err := os.ReadFile(filepath)
 		check(err)
+		pathStrs := strings.Split(filepath, "/")
+		region := strings.TrimSuffix(pathStrs[len(pathStrs)-1], ".json")
 
-		searchFile(file, filepath, countries)
+		regionMap := searchFile(file, filepath, countries, region)
+
+		fp := path.Join(outputDir, region+".json")
+		fmt.Println(fp)
+		output, err := os.Create(fp)
+		check(err)
+		err = json.NewEncoder(output).Encode(regionMap)
+		check(err)
 	}
 	// fmt.Printf("Files: %v", files)
 }
